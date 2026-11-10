@@ -1,0 +1,73 @@
+name: Deploy to Bluehost
+
+# Copies this repo's files into douglaswestby.com's document root.
+#
+# SAFETY: public_html also holds other hosted sites (website_* folders) and
+# cPanel files. This workflow deliberately does NOT use rsync --delete, so it
+# can only add or update files that exist in this repo. It never removes
+# anything on the server. The guard step below also refuses to deploy if the
+# repo contains a top-level path that would land on one of the protected names.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only: list what would be uploaded, change nothing"
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard protected paths
+        run: |
+          set -euo pipefail
+          bad=""
+          for p in website_* dhernandez more cgi-bin .well-known error_log; do
+            if [ -e "$p" ]; then bad="$bad $p"; fi
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::Refusing to deploy. These repo paths would overwrite protected server folders:$bad"
+            exit 1
+          fi
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Rsync to docroot (no deletes)
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          flags="-avz --itemize-changes"
+          if [ "$DRY_RUN" = "true" ]; then
+            flags="$flags --dry-run"
+            echo "Dry run: nothing will be changed on the server."
+          fi
+          # No --delete: files on the server that are not in this repo are left alone.
+          rsync $flags \
+            -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}" \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.gitignore' \
+            --exclude 'README.md' \
+            --exclude '/website_*' \
+            --exclude '/dhernandez' \
+            --exclude '/more' \
+            --exclude '/cgi-bin' \
+            --exclude '/.well-known' \
+            --exclude 'error_log' \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home4/zgaxnhmy/public_html/
