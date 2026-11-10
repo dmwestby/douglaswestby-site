@@ -64,6 +64,7 @@ jobs:
             --exclude '.github' \
             --exclude '.gitignore' \
             --exclude 'README.md' \
+            --exclude '/deploy' \
             --exclude '/website_*' \
             --exclude '/dhernandez' \
             --exclude '/more' \
@@ -71,3 +72,12 @@ jobs:
             --exclude '/.well-known' \
             --exclude 'error_log' \
             ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home4/zgaxnhmy/public_html/
+
+      - name: Keep home page and CV fresh (.htaccess cache block)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: |
+          set -euo pipefail
+          # Adds/refreshes only a marked block in public_html/.htaccess; the rest
+          # of the file is untouched and a one-time backup is kept on the server.
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            'bash -s -- /home4/zgaxnhmy/public_html' < deploy/htaccess-cache.sh
