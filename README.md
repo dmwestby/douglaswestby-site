@@ -22,5 +22,7 @@ plain `http://` visits to `https://douglaswestby.com`, and sends the old
 WordPress addresses (`/resume/`, `/about-me/`, `/contact/`, blog posts and so
 on) to the matching part of the new page. Every rule checks the host name, so
 the other sites in `public_html` are not affected. After that the workflow
-loads the live home page; if it does not come back with HTTP 200, the redirect
-block is removed again automatically and the run is marked failed.
+runs `deploy/check-redirects.sh` on the server, which asks the web server
+directly for the home page (the Bluehost CDN blocks automated requests from
+GitHub). If it does not come back with HTTP 200, the redirect block is removed
+again automatically and the run is marked failed.

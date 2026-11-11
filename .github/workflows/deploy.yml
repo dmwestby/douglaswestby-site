@@ -91,21 +91,16 @@ jobs:
           ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
             'bash -s -- /home4/zgaxnhmy/public_html' < deploy/htaccess-redirects.sh
 
-      - name: Check the live site still loads (undo redirects if not)
+      - name: Check the site still loads (undo redirects if not)
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
         run: |
           set -uo pipefail
-          sleep 5
-          url="https://douglaswestby.com/?deploycheck=${{ github.run_id }}-${{ github.run_attempt }}"
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -L --max-redirs 5 "$url" || echo 000)
-          echo "Home page: HTTP $code"
-          if [ "$code" != "200" ]; then
-            echo "::error::Home page returned $code after the redirect update. Removing the redirect block."
+          # Checked on the server itself: the Bluehost CDN answers 403 to
+          # automated requests from GitHub, so a check from here proves nothing.
+          if ! ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+                 'bash -s -- ${{ secrets.SSH_HOST }}' < deploy/check-redirects.sh; then
+            echo "::error::Home page stopped loading after the redirect update. Removing the redirect block."
             ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
               'bash -s -- /home4/zgaxnhmy/public_html remove' < deploy/htaccess-redirects.sh
             exit 1
           fi
-          for path in "" "resume/"; do
-            curl -sS -o /dev/null -w "www.douglaswestby.com/$path -> %{http_code} %{redirect_url}\n" "https://www.douglaswestby.com/$path?deploycheck=${{ github.run_id }}" || true
-          done
-          curl -sS -o /dev/null -w "douglaswestby.com/resume/ -> %{http_code} %{redirect_url}\n" "https://douglaswestby.com/resume/?deploycheck=${{ github.run_id }}" || true
